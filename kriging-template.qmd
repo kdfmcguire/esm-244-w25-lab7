@@ -61,15 +61,32 @@ ca_dgw_sf <- read_sf(here('data/ca_dgw',
 Take time to check the CRSs for each layer, transform if necessary, and then make a quick visualization. Make sure to rename the depth column to something more useful such as `depth`.
 
 ```{r}
-
+ca_counties_sf |> st_crs()
+ca_dgw_sf |> st_crs()
 ```
 
+```{r}
+ca_dgw_sf <- ca_dgw_sf |>
+  st_transform(crs = 3857) |>
+  rename(depth = dgbs)
+```
 
 # Focus on San Joaquin County
 
 Let's just look at depth to groundwater (ft) in and around San Joaquin County. Filter out San Joaquin county. Then use `st_intersections` to "cut" out all the groundwater plots contained in San Joaquin. Finally, make a quick plot of the county and the wells using depth as a color aesthetic.
 
+```{r}
+san_joaquin <- ca_counties_sf |>
+  filter(name=="San Joaquin")
 
+san_joaquin_wells <- st_intersection(ca_dgw_sf, san_joaquin)
+
+ggplot() +
+  geom_sf(data=san_joaquin, fill = "grey98") +
+  geom_sf(data=san_joaquin_wells, aes(color=depth)) +
+  scale_color_gradient(low = "lightblue", high = "darkblue") +
+  theme_minimal()
+```
 
 # Spatial interpolation
 
@@ -80,7 +97,7 @@ Examine the `variogram()` function from `gstat`. The first input is a formula li
 For now we will only use depth as the output.
 
 ```{r}
-sj_dgw_vgm <- gstat::variogram(depth ~ 1, data = sj_depth_sf)
+sj_dgw_vgm <- gstat::variogram(depth ~ 1, data = san_joaquin_wells)
 ### what if we wanted to consider other covariates? e.g., elevation?
 # sj_dgw_vgm <- gstat::variogram(depth ~ gs_elevati, data = sj_depth_sf)
 
@@ -90,8 +107,7 @@ plot(sj_dgw_vgm)
 
 ```
 
-One we have built the variogram object, we need to specify how to fit it. This is similar in tidymodels where we use fit() after building our workflow to fit the model on training data. Now we need to tell which type of model to run and whether to include a nugget that is not equal to zero.  See `?fit.variogram` for more information.
-
+One we have built the variogram object, we need to specify how to fit it. This is similar in tidymodels where we use fit() after building our workflow to fit the model on training data. Now we need to tell which type of model to run and whether to include a nugget that is not equal to zero. See `?fit.variogram` for more information.
 
 ```{r}
 
@@ -107,6 +123,11 @@ plot(sj_dgw_vgm, vgm_fit)
 attr(vgm_fit, 'SSErr') # ...and you could compare to other models...
 ```
 
+-   nugget: about 100
+
+-   sill: estimated about 2750
+
+-   range = about 40000
 
 ## Spatial kriging
 
@@ -114,7 +135,7 @@ Variograms inform our $\lambda_\alpha$ term in the kriging formula, basically ho
 
 ```{r}
 ### Make a grid over which we'll krige: 
-sj_grid <- st_bbox(sj_county_sf) %>%
+sj_grid <- st_bbox(san_joaquin) %>%
   stars::st_as_stars(dx = 1000, dy = 1000)
 
 ### Look at the grid we made: 
@@ -122,7 +143,7 @@ plot(sj_grid)
 
 ### Perform ordinary kriging: 
 dgw_krige <- krige(depth ~ 1, 
-                   sj_depth_sf, 
+                   san_joaquin_wells, 
                    sj_grid, 
                    model = vgm_fit)  # notice this is where our variogram comes
 
@@ -144,8 +165,8 @@ krige_rast <- dgw_krige %>%
 ### Then we can use ggplot: 
 ggplot() +
   tidyterra::geom_spatraster(data = krige_rast, aes(fill = pred)) +
-  geom_sf(data = sj_depth_sf, aes(fill = depth), shape = 21) +
-  geom_sf(data = sj_county_sf, color = 'black', fill = NA) +
+  geom_sf(data = san_joaquin_wells, aes(fill = depth), shape = 21) +
+  geom_sf(data = san_joaquin, color = 'black', fill = NA) +
   scale_fill_gradient(low = "blue", high = "yellow")
 ```
 

@@ -14,7 +14,11 @@ execute:
   warning: false
 ---
 
+
+
 ## Attach Packages and Load Data
+
+
 
 ```{r}
 library(tidyverse)
@@ -38,12 +42,16 @@ sb_county_sf <- ca_counties_raw_sf %>%
   select(county = name)
 ```
 
+
+
 # Visualization and Cleaning:
 
 Before we conduct spatial data analysis there are a few tasks we ought to complete. As always, visualize your data and examine its contents. Spatial data has the extra requirement that we need to make sure it contains the same cordinate reference systems (crs) between layers.
 
 **1. Transform crs of the layers to match each other**
 - set all to ESPG 3857
+
+
 ```{r}
 ca_counties_raw_sf |> crs()
 pop_den |> crs()
@@ -53,7 +61,11 @@ pop_den <- pop_den |>
   st_transform(crs=3857)
 ```
 
+
+
 **2. Plot the population densities in Santa Barbara county.**
+
+
 
 ```{r}
 ggplot()+
@@ -66,9 +78,13 @@ ggplot()+
 ```
 
 
+
+
   - What do you observe about the density? How to could we handle the sparsity of points in the Los Padres National Forest?
   
 **3. Log Transform the population density data**
+
+
 
 ```{r}
 pop_den <- pop_den |>
@@ -76,7 +92,11 @@ pop_den <- pop_den |>
 ```
 
 
+
+
 **4. Build a variogram of population density**
+
+
 ```{r}
 sb_popden_variogram <- gstat::variogram(popdens ~ 1, data = pop_den)
 
@@ -85,7 +105,11 @@ plot(sb_popden_variogram)
 ```
 
 
+
+
 **5. Plot the fitted variogram and identify the sill, range, and nugget**
+
+
 
 ```{r}
 sb_popden_variogram_fit <- fit.variogram(sb_popden_variogram,
@@ -97,9 +121,13 @@ plot(sb_popden_variogram, sb_popden_variogram_fit)
 ```
 
 
+
+
   - Optional: Compare the models with nugget = true and nugget =FALSE. Use the attr to get the sum of squared error to compare the fits
   
 **6. Interpolate the density with the krige function**
+
+
 ```{r}
 ### Now create the variogram model, & see ?vgm for other model options: 
 sb_popden_variogram_fit_nonug <- fit.variogram(sb_popden_variogram,
@@ -112,28 +140,13 @@ attr(sb_popden_variogram_fit,  'SSErr')
 ```
 
 
+
+
 **7. Plot the interpolation as a ggplot suitable for publication**
+
+
 
 ```{r}
 
-sb_county <- ca_counties_raw_sf |>
-  janitor::clean_names() |>
-  filter(name=="Santa Barbara")
-
-### Make a grid over which we'll krige: 
-sb_grid <- st_bbox(sb_county) %>%
-  stars::st_as_stars(dx = 1000, dy = 1000)
-
-### Look at the grid we made: 
-plot(sb_grid)
-
-### Perform ordinary kriging: 
-bs_popden_krige <- krige(popdens ~ 1, 
-                   pop_den, 
-                   sb_grid, 
-                   model = sb_popden_variogram_fit)  # notice this is where our variogram comes
-
-### Initial plot of kriging outcome: 
-plot(bs_popden_krige)
 ```
 
